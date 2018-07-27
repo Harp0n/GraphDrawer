@@ -1,36 +1,72 @@
 
-
+var input;
 
 function setup() {
   createCanvas(900, 600);  
   stroke(0);     // Set line drawing color to white
 
   input = createInput();
-  input.position(20, 65);
+  input.size(225);
+  input.position(15, 65);
+  inputT = createP("Wyrazenie f(x)");
+  inputT.position(85, 25);
 
-  button = createButton('submit');
-  button.position(input.x + input.width, 65);
-  button.mousePressed(function(){
-    rysuj(start= -3,end=3, step=0.01, k=60, funckja=input.value());
-  });
+  inputStart = createInput(-2);
+  inputStart.position(15, 100);
+  inputStart.size(100);
+  inputStartT = createP("Start wykresu");
+  inputStartT.position(20, 105);
 
-  // rownanie = "sin(x)+cos(x)";
-  // onp = toONP(rownanie);
-  // tree = ONPtoTree(onp)
+  inputEnd = createInput(2);
+  inputEnd.position(15+120, 100);
+  inputEnd.size(105);
+  inputEndT = createP("Koniec wykresu");
+  inputEndT.position(20+120, 105);
+
+  scaleSliderX = createSlider(-3, 3, 0, 0.5);
+  scaleSliderXT = createP("Skalowanie X");
+  scaleSliderXT.position(45, 150);
+  scaleSliderX.position(20, 145);
+
+  scaleSliderY = createSlider(-3, 3, 0, 0.5);
+  scaleSliderYT = createP("Skalowanie Y");
+  scaleSliderYT.position(45, 150+45);
+  scaleSliderY.position(20, 145+45);
+
+  // rSlider = createSlider(0, 255, 100);
+  // rSlider.position(20, 100);
+  // button = createButton('submit');
+  // button.position(input.x + input.width, 65);
+  // button.mousePressed(function(){
+  //   _start = parseInt(inputStart.value());
+  //   _end = parseInt(inputEnd.value());
+  //   rysuj(start=_start,end=_end, step=0.01, k=60, funckja=input.value());
+  // });
+
+  //  rownanie = "x*(-x)";
+  //  onp = toONP(rownanie);
+  //  tree = ONPtoTree(onp)
+  //  print(tree.getValue(1));
   // rysuj(start= -3,end=3, step=0.01, k=60, funckja=rownanie);
 }
 
 function draw() { 
+  _start = parseInt(inputStart.value());
+  _end = parseInt(inputEnd.value());
+  _kx = 60*pow(2,scaleSliderX.value());
+  _ky = 60*pow(2,scaleSliderY.value());
+  rysuj(start=_start,end=_end, step=0.01, kx=_kx, ky=_ky, funkcja=input.value());
 } 
 
 
 
-function rysuj(start= -3,end=3, step=0.01, k=60, funkcja){
+function rysuj(start= -3,end=3, step=0.01, kx=60, ky=60, funkcja){
   background(255);
-  print(funkcja);
   onp = toONP(funkcja);
   tree = ONPtoTree(onp);
-
+  if(!tree)
+    return;
+  k = [kx,ky];
   var prev_y = null;
   var prev_x = null;
   var yMax = -Infinity;
@@ -43,6 +79,8 @@ function rysuj(start= -3,end=3, step=0.01, k=60, funkcja){
 
   for(var i=start; i<=end; i+=step){
     var y = tree.resetAndGet(i);
+    if(y=="error")
+      break;
     yMax = max(yMax, y);
     yMin = min(yMin, y);
 
@@ -66,11 +104,11 @@ function rysuj(start= -3,end=3, step=0.01, k=60, funkcja){
 }
 
 function adjustX(x,k){
-  return k*x+width/2;
+  return k[0]*x+width/2;
 }
 
 function adjustY(y,k){
-  return -k*y+height/2;
+  return -k[1]*y+height/2;
 }
 
 const Type = {
@@ -114,7 +152,11 @@ function Node(content){
         this.value = x;
       }
       else if(this.type==Type.SINGLE){
+        if(!this.leftChild)
+          return "error";
         var leftValue = this.leftChild.getValue(x);
+        if(leftValue=="error")
+          return "error";
         switch(this.content){
           case "sin":
             this.value = sin(leftValue);
@@ -143,8 +185,13 @@ function Node(content){
         }
       }
       else if(this.type==Type.DOUBLE){
+        if(!this.leftChild || !this.rightChild)
+          return "error";
         var leftValue = this.leftChild.getValue(x);
         var rightValue = this.rightChild.getValue(x);
+        if(leftValue=="error" || rightValue=="error"){
+          return "error";
+        }
         switch(this.content){
           case "+":
             this.value = rightValue + leftValue;
@@ -163,7 +210,6 @@ function Node(content){
             break;
         }
       }
-
       return this.value;
     }
 
@@ -220,23 +266,51 @@ function isValue(input){
   return false;
 }
 
+String.prototype.replaceAll = function(search,replace) {
+  if (replace === undefined) {
+      return this.toString();
+  }
+
+  return this.replace(new RegExp(search, 'g'), replace);
+  // return this.split(search).join(replace);
+}
+
 function parser(input){
   this.input = input;
-  this.input = this.input.replace(/ /g,"");
+
+  //process
+  this.input = "("+this.input+")";
+  this.input = this.input.replaceAll(" ", "");
+  this.input = this.input.replaceAll("\\(-","(0-");
+  this.input = this.input.replaceAll("([)0-9])\\(","$1*(");
+  this.input = this.input.replaceAll("([^a-zA-Z][a-zA-Z])\\(","$1*(");
+  this.input = this.input.replaceAll("e", "2.71828182846");
+  this.input = this.input.replaceAll("pi", "3.14159265359");
+  // print(this.input);
+
   this.index = 0;
   this.getNext = function(){
     if(this.index>=this.input.length)
-      return false;
+      return null;
     aktualnyZnak = this.input[this.index];
     if(isDigit(aktualnyZnak))
     {
       liczba = parseInt(aktualnyZnak);
+      ilePoPrzecinku = 0;
       while(true)
       {
         this.index++;
         aktualnyZnak = this.input[this.index];
         if(isDigit(aktualnyZnak)){
-          liczba = liczba*10+parseInt(aktualnyZnak);
+          if(ilePoPrzecinku<1)
+            liczba = liczba*10+parseInt(aktualnyZnak);
+          else{
+            liczba = liczba+parseInt(aktualnyZnak)/pow(10,ilePoPrzecinku++);
+          }
+          continue;
+        }
+        else if(aktualnyZnak=="." || aktualnyZnak==","){
+          ilePoPrzecinku = 1;
           continue;
         }
         else return liczba;
@@ -301,7 +375,7 @@ function toONP(input){
   var stos = [];
   while(true){
     wejscie = p.getNext();
-    if(!wejscie) return wyjscie.concat(stos.reverse());
+    if(wejscie==null) return wyjscie.concat(stos.reverse());
     
     if(isValue(wejscie)){
       // wynik+=wejscie.toString();
