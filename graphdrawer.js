@@ -11,13 +11,13 @@ function setup() {
   inputT = createP("Wyrazenie f(x)");
   inputT.position(85, 25);
 
-  inputStart = createInput(-2);
+  inputStart = createInput(-4);
   inputStart.position(15, 100);
   inputStart.size(100);
   inputStartT = createP("Start wykresu");
   inputStartT.position(20, 105);
 
-  inputEnd = createInput(2);
+  inputEnd = createInput(4);
   inputEnd.position(15+120, 100);
   inputEnd.size(105);
   inputEndT = createP("Koniec wykresu");
@@ -68,28 +68,49 @@ function rysuj(start= -3,end=3, step=0.01, kx=60, ky=60, funkcja){
     return;
   k = [kx,ky];
   var prev_y = null;
+  var prev_dy = null;
   var prev_x = null;
+
+
   var yMax = -Infinity;
   var yMin = Infinity;
 
   stroke(0);
   line(width/2,0,width/2,height); //os y
   line(0,height/2,width,height/2); //os x
+
+  stroke("black"); //legend
+  text('Funkcja', 800, 50);
+  text('Pochodna', 800, 70);
   stroke("blue");
+  line(770,50-5,790,50-5);
+  stroke("red");
+  line(770,70-5,790,70-5);
 
   for(var i=start; i<=end; i+=step){
     var y = tree.resetAndGet(i);
+    var dy = tree.getDerivative();
+
     if(y=="error")
       break;
+    y=max(-10000, min(y,10000));
+    dy=max(-10000, min(dy,10000));
     yMax = max(yMax, y);
     yMin = min(yMin, y);
 
-    var y = adjustY(y,k);
+    y = adjustY(y,k);
+    dy = adjustY(dy,k);
     var x = adjustX(i,k);
     if(prev_y!=null)
+    {
+      stroke("blue");
       line(x,y,prev_x,prev_y);
+      stroke("red");
+      line(x,dy,prev_x,prev_dy);
+    }
     prev_x = x;
     prev_y = y;
+    prev_dy = dy;
   }
 
   stroke(0);
@@ -216,6 +237,91 @@ function Node(content){
     else return this.value;
   }
 
+  this.getDerivative = function(){
+      log("xd");
+      if(this.type==Type.CONST){
+        return 0;
+      }
+      else if(this.type==Type.VARIABLE){
+        return 1;
+      }
+      else if(this.type==Type.SINGLE){
+        result = 0;
+        if(!this.leftChild)
+          return "error";
+        var leftValue = this.leftChild.getValue(0);
+        var leftDerivative = this.leftChild.getDerivative();
+        if(leftValue=="error")
+          return "error";
+        switch(this.content){
+          case "sin":
+            result = cos(leftValue);
+            break;
+          case "cos":
+            result = -sin(leftValue);
+            break;
+          case "tg":
+          case "tan":
+            result = 1/pow(cos(leftValue),2);
+            break;
+          case "ctg":
+          case "ctan":
+            result = -1/pow(sin(leftValue),2);
+            break;
+          case "ln":
+          case "log":
+            result = 1/leftValue;
+            break;
+          case "abs":
+            if(leftValue>0)
+              result = leftValue;
+            else if (leftValue<0)
+              result = -leftValue;
+            else
+              result = 0;
+            break;
+          case "sqrt":
+            result = 1/(2*leftValue);
+            break;
+        }
+        return result*leftDerivative;
+      }
+      else if(this.type==Type.DOUBLE){
+        if(!this.leftChild || !this.rightChild)
+          return "error";
+        var rightValue = this.leftChild.getValue(0);
+        var leftValue = this.rightChild.getValue(0);
+        var rightDerivative = this.leftChild.getDerivative();
+        var leftDerivative = this.rightChild.getDerivative();
+        if(leftValue=="error" || rightValue=="error"){
+          return "error";
+        }
+        result = 0;
+        switch(this.content){
+          case "+":
+            result =leftDerivative + rightDerivative;
+            break;
+          case "-":
+            result = leftDerivative - rightDerivative;
+            break;
+          case "*":
+            result = leftDerivative*rightValue + leftValue*rightDerivative;
+            break;
+          case "/":
+            result = (leftDerivative*rightValue - leftValue*rightDerivative)/pow(rightValue,2);
+            break;
+          case "^":
+            result = pow(leftValue,rightValue)*(rightValue*leftDerivative/abs(leftValue) +
+                                                rightDerivative*log(abs(leftValue)) 
+                                              )
+            if(leftValue<0) //multiply by -1 if base is negative
+              result *= -1;
+            break;
+        }
+        return result;
+      }
+  }
+
   this.resetAndGet = function(x){
     this.resetValue();
     return this.getValue(x);
@@ -280,10 +386,11 @@ function parser(input){
 
   //process
   this.input = "("+this.input+")";
-  this.input = this.input.replaceAll(" ", "");
-  this.input = this.input.replaceAll("\\(-","(0-");
-  this.input = this.input.replaceAll("([)0-9])\\(","$1*(");
+  this.input = this.input.replaceAll(" ", ""); //usun spacje
+  this.input = this.input.replaceAll("\\(-","(0-"); //0 przed minusami
+  this.input = this.input.replaceAll("([)0-9])\\(","$1*("); //mnozenie miedzy liczbami i nawiasami
   this.input = this.input.replaceAll("([^a-zA-Z][a-zA-Z])\\(","$1*(");
+  this.input = this.input.replaceAll("([0-9])([a-zA-Z])","$1*$2");
   this.input = this.input.replaceAll("e", "2.71828182846");
   this.input = this.input.replaceAll("pi", "3.14159265359");
   // print(this.input);
